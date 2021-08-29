@@ -2,10 +2,7 @@ use image::DynamicImage;
 use reqwest::{Client, Error};
 use serde::{Deserialize, Serialize};
 use serde_json::json;
-use std::{
-    fmt::Display,
-    io::{self, Write},
-};
+use std::io::{self, Write};
 use viuer::{print, Config};
 
 #[derive(Serialize, Deserialize, Debug)]
@@ -35,7 +32,7 @@ pub struct Media {
     pub genres: Option<Vec<String>>,
 
     #[serde(rename = "coverImage")]
-    pub coverImage: Option<CoverImage>,
+    pub cover_image: Option<CoverImage>,
 }
 
 #[derive(Serialize, Deserialize, Debug)]
@@ -118,20 +115,25 @@ impl AnilistEntry {
         Some(image)
     }
 
-    fn option_to_string<T>(opt: Option<T>) -> String
+    fn unwrap_option<T>(opt: Option<T>) -> T
     where
-        T: Display,
+        T: Default,
     {
         if let Some(x) = opt {
-            format!("{}", x)
+            return x;
         } else {
-            String::from("None")
+            return T::default();
         }
     }
 
     async fn print_entry(&self) {
+        let title;
+        let id;
+        let format;
+        let genres: Vec<String>;
+
         if let Some(x) = &self.data.media {
-            if let Some(y) = &x.coverImage {
+            if let Some(y) = &x.cover_image {
                 if let Some(z) = &y.img {
                     let url = z.to_string();
                     if let Some(img) = AnilistEntry::get_image(url).await {
@@ -143,13 +145,27 @@ impl AnilistEntry {
 
                         print(&img, &conf);
 
-                        println!(
-                            "\nID: {}\nName: {}",
-                            AnilistEntry::option_to_string(x.id),
-                            AnilistEntry::option_to_string(
-                                x.title.as_ref().unwrap().english.clone()
+                        let titles = x.title.as_ref().unwrap();
+                        let na = "None".to_string();
+
+                        title = titles
+                            .english
+                            .as_ref()
+                            .unwrap_or(
+                                titles
+                                    .romaji
+                                    .as_ref()
+                                    .unwrap_or(titles.native.as_ref().unwrap_or(&na)),
                             )
-                        )
+                            .to_string();
+                        id = Self::unwrap_option(x.id);
+                        format = Self::unwrap_option(x.format.clone());
+                        genres = Self::unwrap_option(x.genres.clone());
+
+                        println!(
+                            "\nID: {}\nName: {}\nFormat: {}\nGenres: {:?}\n",
+                            id, title, format, genres
+                        );
                     }
                 }
             }
@@ -207,8 +223,8 @@ fn input(message: &str) -> String {
     let mut ret = String::new();
     io::stdin()
         .read_line(&mut ret)
-        .and_then(|e| {
-            println!("");
+        .and_then(|_| {
+            println!();
             Ok(())
         })
         .expect("Failed to read from stdin");
