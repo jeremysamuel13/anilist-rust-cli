@@ -15,7 +15,7 @@ async fn main() -> Result<(), Error> {
         "\n
              _______________________
             |                       |
-            | Connected to AniList! |
+            |  Welcome to AniList!  |
             |_______________________|
 
             \n
@@ -42,7 +42,11 @@ async fn main() -> Result<(), Error> {
                     }
                     Ok(val) => {
                         let res = client.get_entry(val).await;
-                        res.print_entry().await;
+                        if let Ok(o) = res {
+                            o.print_entry().await;
+                        } else {
+                            println!("🚫 Can't connect to anilist")
+                        }
                     }
                 }
             }
@@ -75,48 +79,41 @@ impl AnilistEntry {
         let genres: Vec<String>;
 
         if let Some(x) = &self.data.media {
-            if let Some(y) = &x.cover_image {
-                if let Some(z) = &y.img {
-                    let url = z.to_string();
-                    if let Some(img) = AnilistEntry::get_image(url).await {
-                        let conf = Config {
-                            transparent: true,
-                            absolute_offset: false,
-                            ..Default::default()
-                        };
+            let conf = Config {
+                transparent: true,
+                absolute_offset: false,
+                ..Default::default()
+            };
 
-                        let print_res = print(&img, &conf);
+            let print_res = print(&self.image.image, &conf);
 
-                        if let Err(_) = print_res {
-                            println!("🚫 Sorry! There was an error printing the image!")
-                        }
-
-                        let titles = x.title.as_ref().unwrap();
-                        let na = "None".to_string();
-
-                        title = titles
-                            .english
-                            .as_ref()
-                            .unwrap_or(
-                                titles
-                                    .romaji
-                                    .as_ref()
-                                    .unwrap_or(titles.native.as_ref().unwrap_or(&na)),
-                            )
-                            .to_string();
-
-                        //GETTING INFO
-                        id = x.id.unwrap_or_default();
-                        format = x.format.clone().unwrap_or_default();
-                        genres = x.genres.clone().unwrap_or_default();
-
-                        println!(
-                            "\nID: {}\nName: {}\nFormat: {}\nGenres: {:?}",
-                            id, title, format, genres
-                        );
-                    }
-                }
+            if let Err(_) = print_res {
+                println!("🚫 Sorry! There was an error printing the image!")
             }
+
+            let titles = x.title.as_ref().unwrap();
+            let na = "None".to_string();
+
+            title = titles
+                .english
+                .as_ref()
+                .unwrap_or(
+                    titles
+                        .romaji
+                        .as_ref()
+                        .unwrap_or(titles.native.as_ref().unwrap_or(&na)),
+                )
+                .to_string();
+
+            //GETTING INFO
+            id = x.id.unwrap_or_default();
+            format = x.format.clone().unwrap_or_default();
+            genres = x.genres.clone().unwrap_or_default();
+
+            println!(
+                "\nID: {}\nName: {}\nFormat: {}\nGenres: {:?}",
+                id, title, format, genres
+            );
         } else {
             println!("🚫 Can't fetch query")
         }

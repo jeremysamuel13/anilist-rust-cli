@@ -1,12 +1,34 @@
 use image::DynamicImage;
-use reqwest::Client;
+use reqwest::{Client, Error};
 use serde::{Deserialize, Serialize};
 use serde_json::json;
+
+#[derive(Debug)]
+pub struct AnilistImage {
+    pub image: DynamicImage,
+}
+
+impl AnilistImage {
+    pub fn new(image: DynamicImage) -> Self {
+        Self { image }
+    }
+}
+
+impl Default for AnilistImage {
+    fn default() -> Self {
+        Self {
+            image: DynamicImage::new_bgr8(0, 0),
+        }
+    }
+}
 
 #[derive(Serialize, Deserialize, Debug)]
 pub struct AnilistEntry {
     #[serde(rename = "data")]
     pub data: Data,
+
+    #[serde(skip)]
+    pub image: AnilistImage,
 }
 
 #[derive(Serialize, Deserialize, Debug)]
@@ -80,7 +102,7 @@ impl AnilistClient {
         }
     }
 
-    pub async fn get_entry(&self, id: u32) -> AnilistEntry {
+    pub async fn get_entry(&self, id: u32) -> Result<AnilistEntry, Error> {
         // Define query and variables
         let json = json!({"query": QUERY, "variables": {"id": id}});
         // Make HTTP post request
@@ -91,25 +113,37 @@ impl AnilistClient {
             .header("Accept", "application/json")
             .body(json.to_string())
             .send()
-            .await
-            .unwrap()
+            .await?
             .text()
-            .await
-            .unwrap();
+            .await?;
 
         // Get json
-        let result: AnilistEntry = serde_json::from_str(&resp).unwrap();
+        let mut result: AnilistEntry = serde_json::from_str(&resp).unwrap();
 
-        result
+        // Fetching and storing cover image
+        if let Some(x) = &result.data.media {
+            if let Some(y) = &x.cover_image {
+                if let Some(z) = &y.img {
+                    let url = z.to_string();
+                    if let Ok(img) = AnilistEntry::get_image(url).await {
+                        result.image = AnilistImage::new(img);
+                    } else {
+                        result.image = AnilistImage::default();
+                    }
+                }
+            }
+        }
+
+        Ok(result)
     }
 }
 
 impl AnilistEntry {
-    pub async fn get_image(url: String) -> Option<DynamicImage> {
-        let img_bytes = reqwest::get(url).await.ok()?.bytes().await.ok()?;
+    async fn get_image(url: String) -> Result<DynamicImage, Box<dyn std::error::Error>> {
+        let img_bytes = reqwest::get(url).await?.bytes().await?;
 
-        let image = image::load_from_memory(&img_bytes).ok()?;
+        let image = image::load_from_memory(&img_bytes)?;
 
-        Some(image)
+        Ok(image)
     }
 }
