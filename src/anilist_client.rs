@@ -1,7 +1,8 @@
 use image::DynamicImage;
-use reqwest::{Client, Error};
+use reqwest::Client;
 use serde::{Deserialize, Serialize};
 use serde_json::json;
+use viuer::{print, Config};
 
 #[derive(Debug)]
 pub struct AnilistImage {
@@ -40,37 +41,37 @@ pub struct Data {
 #[derive(Serialize, Deserialize, Debug)]
 pub struct Media {
     #[serde(rename = "id")]
-    pub id: Option<u32>,
+    pub id: i32,
 
     #[serde(rename = "title")]
-    pub title: Option<Title>,
+    pub title: Title,
 
     #[serde(rename = "format")]
-    pub format: Option<String>,
+    pub format: String,
 
     #[serde(rename = "genres")]
-    pub genres: Option<Vec<String>>,
+    pub genres: Vec<String>,
 
     #[serde(rename = "coverImage")]
-    pub cover_image: Option<CoverImage>,
+    pub cover_image: CoverImage,
 }
 
 #[derive(Serialize, Deserialize, Debug)]
 pub struct Title {
     #[serde(rename = "romaji")]
-    pub romaji: Option<String>,
+    pub romaji: String,
 
     #[serde(rename = "english")]
-    pub english: Option<String>,
+    pub english: String,
 
     #[serde(rename = "native")]
-    pub native: Option<String>,
+    pub native: String,
 }
 
 #[derive(Serialize, Deserialize, Debug)]
 pub struct CoverImage {
     #[serde(rename = "medium")]
-    pub img: Option<String>,
+    pub img: String,
 }
 
 const QUERY: &str = "
@@ -102,7 +103,7 @@ impl AnilistClient {
         }
     }
 
-    pub async fn get_entry(&self, id: u32) -> Result<AnilistEntry, Error> {
+    pub async fn get_entry(&self, id: i32) -> Result<AnilistEntry, Box<dyn std::error::Error>> {
         // Define query and variables
         let json = json!({"query": QUERY, "variables": {"id": id}});
         // Make HTTP post request
@@ -118,23 +119,22 @@ impl AnilistClient {
             .await?;
 
         // Get json
-        let mut result: AnilistEntry = serde_json::from_str(&resp).unwrap();
+        let result: Result<AnilistEntry, _> = serde_json::from_str(&resp);
 
-        // Fetching and storing cover image
-        if let Some(x) = &result.data.media {
-            if let Some(y) = &x.cover_image {
-                if let Some(z) = &y.img {
-                    let url = z.to_string();
-                    if let Ok(img) = AnilistEntry::get_image(url).await {
+        match result {
+            Ok(mut result) => {
+                if let Some(x) = &result.data.media {
+                    // Fetching and storing cover image
+                    if let Ok(img) = AnilistEntry::get_image(x.cover_image.img.to_string()).await {
                         result.image = AnilistImage::new(img);
                     } else {
                         result.image = AnilistImage::default();
                     }
                 }
+                return Ok(result);
             }
+            Err(e) => return Err(Box::new(e)),
         }
-
-        Ok(result)
     }
 }
 
@@ -145,5 +145,26 @@ impl AnilistEntry {
         let image = image::load_from_memory(&img_bytes)?;
 
         Ok(image)
+    }
+
+    pub async fn print_entry(&self) {
+        if let Some(x) = &self.data.media {
+            let conf = Config {
+                transparent: true,
+                absolute_offset: false,
+                ..Default::default()
+            };
+
+            if print(&self.image.image, &conf).is_err() {
+                println!("🚫 Sorry! There was an error printing the image!")
+            }
+
+            println!(
+                "\nID: {}\nName: {}\nFormat: {}\nGenres: {:?}",
+                &x.id, &x.title.english, &x.format, &x.genres
+            );
+        } else {
+            println!("🚫 Can't fetch query")
+        }
     }
 }
